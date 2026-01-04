@@ -4,10 +4,11 @@
  * Copyright The Asahi Linux Contributors
  */
 
+use crate::transport::Transport;
 use crate::{Error, Result};
-use i2cdev::{core::I2CDevice, linux::LinuxI2CDevice};
 use log::{error, info};
 use std::{
+    io,
     str::FromStr,
     thread,
     time::{Duration, Instant},
@@ -43,6 +44,7 @@ enum TpsMode {
 
 impl FromStr for TpsMode {
     type Err = ();
+
     fn from_str(input: &str) -> std::result::Result<TpsMode, ()> {
         match input {
             "APP " => Ok(TpsMode::App),
@@ -60,41 +62,24 @@ fn is_invalid_cmd(val: u32) -> bool {
     val == 0x444d4321
 }
 
-pub(crate) struct Device {
-    i2c: LinuxI2CDevice,
+pub(crate) struct Device<'a> {
+    transport: &'a mut dyn Transport,
     key: Vec<u8>,
 }
 
-/// Try to open the given I2C bus and slave address.
-/// Returns a configured LinuxI2CDevice on success.
-fn verify_i2c_device(bus: &str, slave_address: u16) -> Result<LinuxI2CDevice> {
-    match LinuxI2CDevice::new(bus, slave_address) {
-        Ok(dev) => {
-            return Ok(dev);
-        }
-        Err(_) => {} // Fall through to attempt forced open
-    }
+impl<'a> Device<'a> {
+    pub(crate) fn new(transport: &'a mut dyn Transport, code: &str) -> Result<Self> {
+        let mut key = code.as_bytes().to_vec();
+        key.reverse();
 
-    info!("Safely opening failed ==> Forcefully opening device...");
-    let forced = unsafe { LinuxI2CDevice::force_new(bus, slave_address) };
-    match forced {
-        Ok(dev) => Ok(dev),
-        Err(_) => Err(Error::I2C),
-    }
-}
+        let mut device = Self { transport, key };
 
-impl Device {
-    pub(crate) fn new(bus: &str, address: u16, code: String) -> Result<Self> {
-        let mut device = Self {
-            i2c: verify_i2c_device(bus, address)?,
-            key: code.into_bytes().into_iter().rev().collect::<Vec<u8>>(),
-        };
         if device.get_mode()? != TpsMode::App {
             return Err(Error::TypecController);
         }
+
         device.lock(device.key.clone().as_slice())?;
         device.dbma(true)?;
-
         Ok(device)
     }
 
@@ -109,7 +94,6 @@ impl Device {
         cmd_timeout: Duration,
         res_delay: Duration,
     ) -> Result<()> {
-        // First: Check CMD1 Register busy
         {
             let mut status_buf = [0u8; 4];
             self.read_block(TPS_REG_CMD1, &mut status_buf)?;
@@ -120,20 +104,18 @@ impl Device {
             }
         }
 
-        // Write input Data to DATA1
         if !in_data.is_empty() {
             self.write_block(TPS_REG_DATA1, in_data)?;
         }
 
-        // Write 4-byte command tag
         self.write_block(TPS_REG_CMD1, cmd_tag)?;
 
-        // Poll until CMD1 becomes zero or timeout
         let start = Instant::now();
         loop {
             let mut status_buf = [0u8; 4];
             self.read_block(TPS_REG_CMD1, &mut status_buf)?;
             let val = u32::from_le_bytes(status_buf);
+
             if is_invalid_cmd(val) {
                 info!("Invalid Command");
                 return Err(Error::TypecController);
@@ -145,6 +127,7 @@ impl Device {
                 return Err(Error::ControllerTimeout);
             }
         }
+
         thread::sleep(res_delay);
         Ok(())
     }
@@ -155,23 +138,32 @@ impl Device {
         buf.push(reg);
         buf.push(size);
         buf.extend_from_slice(data);
-        self.i2c.write(&buf).map_err(|_| Error::I2C)?;
+
+        self.transport.write(&buf).map_err(Error::Io)?;
         Ok(())
     }
 
-    fn read_block(&mut self, reg: u8, buf: &mut [u8]) -> Result<()> {
-        self.i2c.write(&[reg]).map_err(|_| Error::I2C)?;
-        let mut internal_buf = vec![0u8; buf.len() + 1];
-        self.i2c.read(&mut internal_buf).map_err(|_| Error::I2C)?;
-        buf.copy_from_slice(&internal_buf[1..=buf.len()]);
+    fn read_block(&mut self, reg: u8, out: &mut [u8]) -> Result<()> {
+        self.transport.write(&[reg]).map_err(Error::Io)?;
 
+        let need = out.len() + 1;
+        let internal = self.transport.read(need).map_err(Error::Io)?;
+        if internal.len() != need {
+            return Err(Error::Io(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                format!("read_block: expected {need} bytes, got {}", internal.len()),
+            )));
+        }
+
+        out.copy_from_slice(&internal[1..=out.len()]);
         Ok(())
     }
 
     fn get_mode(&mut self) -> Result<TpsMode> {
         let mut buf = [0u8; 4];
         self.read_block(TPS_REG_MODE, &mut buf)?;
-        let s = std::str::from_utf8(&buf).unwrap();
+
+        let s = std::str::from_utf8(&buf).map_err(Error::Utf8)?;
         let m = TpsMode::from_str(s).map_err(|_| Error::TypecController)?;
         Ok(m)
     }
@@ -196,11 +188,13 @@ impl Device {
         if self.get_mode()? != TpsMode::Dbma {
             return Err(Error::TypecController);
         }
+
         let data = [
             vec![((sop as u8) << 4) | vdos.len() as u8],
             vdos.iter().flat_map(|val| val.to_le_bytes()).collect(),
         ]
         .concat();
+
         self.exec_cmd_with_timing(
             b"VDMs",
             &data,
@@ -250,6 +244,7 @@ impl Device {
                 return Err(Error::ReconnectTimeout);
             }
         }
+
         info!(" Connected");
         thread::sleep(RECONNECT_WAIT);
         self.serial()
@@ -260,6 +255,7 @@ impl Device {
         info!("Putting target into serial mode...");
         self.vdms(VdmSopType::SopStar, &vdos)?;
         info!("Putting local end into serial mode... ");
+
         if self.get_mode()? != TpsMode::Dbma {
             return Err(Error::TypecController);
         }
@@ -273,7 +269,7 @@ impl Device {
     }
 }
 
-impl Drop for Device {
+impl Drop for Device<'_> {
     fn drop(&mut self) {
         let lock: [u8; 4] = [0, 0, 0, 0];
         let _ = self.dbma(false);
