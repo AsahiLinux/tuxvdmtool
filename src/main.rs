@@ -7,7 +7,7 @@
 pub mod cd321x;
 
 use env_logger::Env;
-use log::error;
+use log::{error};
 use std::{fs, process::ExitCode};
 
 #[derive(Debug)]
@@ -19,6 +19,8 @@ enum Error {
     TypecController,
     InvalidArgument,
     ReconnectTimeout,
+    ControllerTimeout,
+    I2CError,
     Io(std::io::Error),
     Utf8(std::str::Utf8Error),
 }
@@ -28,8 +30,12 @@ type Result<T> = std::result::Result<T, Error>;
 fn vdmtool() -> Result<()> {
     let matches = clap::command!()
         .arg(
-            clap::arg!(-d --device [DEVICE] "Path to the USB-C controller device.")
-                .default_value("/sys/class/i2c-dev/i2c-0/device/0-0038"),
+            clap::arg!(-b --bus [BUS] "i2c bus of the USB-C controller device.")
+                .default_value("/dev/i2c-0"),
+        )
+        .arg(
+            clap::arg!(-a --address [ADDRESS] "i2c slave address of the USB-C controller device.")
+                .default_value("0x38"),
         )
         .subcommand(
             clap::Command::new("reboot")
@@ -55,8 +61,17 @@ fn vdmtool() -> Result<()> {
         error!("Host is not an Apple silicon system: \"{compat}\"");
         return Err(Error::Compatible);
     }
+
+    let addr_str = matches.get_one::<String>("address").unwrap();
+    let addr: u16;
+    if addr_str.starts_with("0x") {
+        addr = u16::from_str_radix(&addr_str[2..], 16).unwrap();
+    } else {
+        addr = u16::from_str_radix(addr_str, 10).unwrap();
+    }
+
     let code = device.to_uppercase();
-    let device = cd321x::Device::new(matches.get_one::<String>("device").unwrap(), code)?;
+    let mut device = cd321x::Device::new(matches.get_one::<String>("bus").unwrap(), addr, code)?;
 
     match matches.subcommand() {
         Some(("dfu", _)) => {

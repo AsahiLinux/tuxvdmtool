@@ -1,6 +1,6 @@
 [package]
 name = "tuxvdmtool"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "A tool to interact with USB Type C controller chips to interact with connected Apple devices"
@@ -10,3 +10,4 @@ repository = "https://github.com/AsahiLinux/tuxvdmtool"
 clap = { version = "3", features = ["cargo"] }
 log = "0.4.28"
 env_logger = { version = "0.11.8", default-features = false }
+i2cdev = "0.6"
