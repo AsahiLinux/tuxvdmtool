@@ -120,7 +120,6 @@ impl Device {
         // Write input Data to DATA1
         if !in_data.is_empty() {
             self.write_block(TPS_REG_DATA1, in_data)?;
-            info!("Wrote Data: {:02X?}", in_data);
         }
 
         // Write 4-byte command tag
@@ -132,12 +131,10 @@ impl Device {
             let mut status_buf = [0u8; 4];
             self.read_block(TPS_REG_CMD1, &mut status_buf)?;
             let val = u32::from_le_bytes(status_buf);
-
             if is_invalid_cmd(val) {
                 info!("Invalid Command");
-                return Err(Error::InvalidArgument);
+                return Err(Error::TypecController);
             }
-
             if val == 0 {
                 break;
             }
@@ -146,7 +143,6 @@ impl Device {
             }
         }
         thread::sleep(res_delay);
-
         Ok(())
     }
 
@@ -176,7 +172,6 @@ impl Device {
         self.read_block(TPS_REG_MODE, &mut buf)?;
         let s = std::str::from_utf8(&buf).unwrap();
         let m = TpsMode::from_str(s).map_err(|_| Error::TypecController)?;
-
         Ok(m)
     }
 
