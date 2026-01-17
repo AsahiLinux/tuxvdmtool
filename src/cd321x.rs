@@ -220,7 +220,7 @@ impl Device {
 
     fn dven(&mut self, vdos: &[u32]) -> Result<()> {
         let data: Vec<u8> = vdos.iter().flat_map(|val| val.to_le_bytes()).collect();
-        self.exec_cmd(b"DEVn", &data)
+        self.exec_cmd(b"DVEn", &data)
     }
 
     fn check_connected(&mut self) -> Result<bool> {
