@@ -2,10 +2,6 @@
 
 This tool lets you get a serial console on an Apple Silicon device and reboot it remotely, using only another Apple Silicon device running Linux and a standard Type C cable.
 
-## Disclaimer
-
-Requires as of September 2025 the AsahiLinux downstream kernel. The original tipd driver change is probably not upstreamable but vdmtool is expected to be updated if the upstream driver gains support for this.
-
 ## Copyright
 
 This is based on [macvdmtool](https://github.com/AsahiLinux/macvdmtool) without replicating portions of [ThunderboltPatcher](https://github.com/osy/ThunderboltPatcher) and licensed under Apache-2.0.
@@ -28,6 +24,8 @@ Connect the two devices via their DFU ports. That's:
 
 You need to use a *USB 3.0 compatible* (SuperSpeed) Type C cable. USB 2.0-only cables, including most cables meant for charging, will not work, as they do not have the required pins. Thunderbolt cables work too.
 
+Note that the numbering of the i2c busses is not stable and the default bus `/dev/i2c-0` will be wrong randomly. To find the correct buse use `grep cd321x /sys/class/i2c-dev/i2c-?/device/?-0038/name`.
+
 Run it as root (`sudo ./tuxvdmtool`).
 
 ```
@@ -35,8 +33,9 @@ USAGE:
     linuxvdmtool [OPTIONS] [SUBCOMMAND]
 
 OPTIONS:
-    -d, --device [<DEVICE>...]    Path to the USB-C controller device. [default: 
-                                  /sys/class/i2c-dev/i2c-0/device/0-0038]
+    -a, --address [<ADDRESS>...]    i2c slave address of the USB-C controller device. [default:
+                                    0x38]
+    -b, --bus [<BUS>...]            i2c bus of the USB-C controller device. [default: /dev/i2c-0]
     -h, --help                    Print help information
     -V, --version                 Print version information
 
