@@ -33,24 +33,24 @@ enum VdmSopType {
 #[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 enum TpsMode {
-    TpsModeApp,
-    TpsModeBoot,
-    TpsModeBist,
-    TpsModeDisc,
-    TpsModePtch,
-    TpsModeDbma,
+    App,
+    Boot,
+    Bist,
+    Disc,
+    Ptch,
+    Dbma,
 }
 
 impl FromStr for TpsMode {
     type Err = ();
     fn from_str(input: &str) -> std::result::Result<TpsMode, ()> {
         match input {
-            "APP " => Ok(TpsMode::TpsModeApp),
-            "BOOT" => Ok(TpsMode::TpsModeBoot),
-            "BIST" => Ok(TpsMode::TpsModeBist),
-            "DISC" => Ok(TpsMode::TpsModeDisc),
-            "PTCH" => Ok(TpsMode::TpsModePtch),
-            "DBMa" => Ok(TpsMode::TpsModeDbma),
+            "APP " => Ok(TpsMode::App),
+            "BOOT" => Ok(TpsMode::Boot),
+            "BIST" => Ok(TpsMode::Bist),
+            "DISC" => Ok(TpsMode::Disc),
+            "PTCH" => Ok(TpsMode::Ptch),
+            "DBMa" => Ok(TpsMode::Dbma),
             _ => Err(()),
         }
     }
@@ -182,7 +182,7 @@ impl Device {
     fn dbma(&mut self, debug: bool) -> Result<()> {
         let data: [u8; 1] = if debug { [1] } else { [0] };
         self.exec_cmd(b"DBMa", &data)?;
-        if self.get_mode()? != TpsMode::TpsModeDbma {
+        if self.get_mode()? != TpsMode::Dbma {
             return Err(Error::TypecController);
         }
         Ok(())
@@ -192,7 +192,7 @@ impl Device {
         if vdos.is_empty() || vdos.len() > 7 {
             return Err(Error::InvalidArgument);
         }
-        if self.get_mode()? != TpsMode::TpsModeDbma {
+        if self.get_mode()? != TpsMode::Dbma {
             return Err(Error::TypecController);
         }
         let data = [
@@ -259,7 +259,7 @@ impl Device {
         info!("Putting target into serial mode...");
         self.vdms(VdmSopType::SopStar, &vdos)?;
         info!("Putting local end into serial mode... ");
-        if self.get_mode()? != TpsMode::TpsModeDbma {
+        if self.get_mode()? != TpsMode::Dbma {
             return Err(Error::TypecController);
         }
         self.dven(&vdos[1..2])
