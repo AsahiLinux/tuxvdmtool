@@ -89,6 +89,9 @@ impl Device {
             i2c: verify_i2c_device(bus, address)?,
             key: code.into_bytes().into_iter().rev().collect::<Vec<u8>>(),
         };
+        if device.get_mode()? != TpsMode::App {
+            return Err(Error::TypecController);
+        }
         device.lock(device.key.clone().as_slice())?;
         device.dbma(true)?;
 
