@@ -79,7 +79,7 @@ fn verify_i2c_device(bus: &str, slave_address: u16) -> Result<LinuxI2CDevice> {
     let forced = unsafe { LinuxI2CDevice::force_new(bus, slave_address) };
     match forced {
         Ok(dev) => Ok(dev),
-        Err(_) => Err(Error::I2CError),
+        Err(_) => Err(Error::I2C),
     }
 }
 
@@ -152,16 +152,14 @@ impl Device {
         buf.push(reg);
         buf.push(size);
         buf.extend_from_slice(data);
-        self.i2c.write(&buf).map_err(|_| Error::I2CError)?;
+        self.i2c.write(&buf).map_err(|_| Error::I2C)?;
         Ok(())
     }
 
     fn read_block(&mut self, reg: u8, buf: &mut [u8]) -> Result<()> {
-        self.i2c.write(&[reg]).map_err(|_| Error::I2CError)?;
+        self.i2c.write(&[reg]).map_err(|_| Error::I2C)?;
         let mut internal_buf = vec![0u8; buf.len() + 1];
-        self.i2c
-            .read(&mut internal_buf)
-            .map_err(|_| Error::I2CError)?;
+        self.i2c.read(&mut internal_buf).map_err(|_| Error::I2C)?;
         buf.copy_from_slice(&internal_buf[1..=buf.len()]);
 
         Ok(())
@@ -176,7 +174,7 @@ impl Device {
     }
 
     fn lock(&mut self, key: &[u8]) -> Result<()> {
-        self.exec_cmd(b"LOCK", &key)
+        self.exec_cmd(b"LOCK", key)
     }
 
     fn dbma(&mut self, debug: bool) -> Result<()> {

@@ -20,9 +20,10 @@ enum Error {
     InvalidArgument,
     ReconnectTimeout,
     ControllerTimeout,
-    I2CError,
+    I2C,
     Io(std::io::Error),
     Utf8(std::str::Utf8Error),
+    Parse(std::num::ParseIntError),
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -64,10 +65,10 @@ fn vdmtool() -> Result<()> {
 
     let addr_str = matches.get_one::<String>("address").unwrap();
     let addr: u16;
-    if addr_str.starts_with("0x") {
-        addr = u16::from_str_radix(&addr_str[2..], 16).unwrap();
+    if let Some(stripped) = addr_str.strip_prefix("0x") {
+        addr = u16::from_str_radix(stripped, 16).map_err(Error::Parse)?;
     } else {
-        addr = u16::from_str_radix(addr_str, 10).unwrap();
+        addr = addr_str.parse::<u16>().map_err(Error::Parse)?;
     }
 
     let code = device.to_uppercase();
