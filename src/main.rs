@@ -7,7 +7,7 @@
 pub mod cd321x;
 
 use env_logger::Env;
-use log::{error};
+use log::error;
 use std::{fs, process::ExitCode};
 
 #[derive(Debug)]
