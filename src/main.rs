@@ -50,6 +50,7 @@ fn vdmtool() -> Result<()> {
             clap::Command::new("reboot serial").about("reboot the target and enter serial mode"),
         )
         .subcommand(clap::Command::new("serial").about("enter serial mode on both ends"))
+        .subcommand(clap::Command::new("debugusb").about("enter Debug USB mode on target"))
         .subcommand(clap::Command::new("dfu").about("put the target into DFU mode"))
         .subcommand(clap::Command::new("nop").about("Do nothing"))
         .arg_required_else_help(true)
@@ -90,6 +91,9 @@ fn vdmtool() -> Result<()> {
         Some(("nop", _)) => {}
         Some(("serial", _)) => {
             device.serial()?;
+        }
+        Some(("debugusb", _)) => {
+            device.debugusb()?;
         }
         _ => {}
     }
