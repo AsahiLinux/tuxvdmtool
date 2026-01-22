@@ -265,6 +265,12 @@ impl Device {
         }
         self.dven(&vdos[1..2])
     }
+
+    pub(crate) fn debugusb(&mut self) -> Result<()> {
+        let vdos: [u32; 2] = [0x5ac8012, 0x1824606];
+        info!("Putting target into DebugUSB mode...");
+        self.vdms(VdmSopType::SopStar, &vdos)
+    }
 }
 
 impl Drop for Device {
