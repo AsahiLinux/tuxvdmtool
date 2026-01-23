@@ -4,11 +4,20 @@
  * Copyright The Asahi Linux Contributors
  */
 
+
+#![cfg_attr(not(any(target_os = "linux", target_os = "android")), allow(dead_code, unused_imports))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn main() {
+    eprintln!("tuxvdmtool currently supports Linux only.");
+}
+
 pub mod cd321x;
+pub mod transport;
 
 use env_logger::Env;
 use log::error;
 use std::{fs, process::ExitCode};
+use transport::i2c::I2cTransport;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -45,7 +54,6 @@ fn vdmtool() -> Result<()> {
                     clap::Command::new("serial").about("reboot the target and enter serial mode"),
                 ),
         )
-        // dummy command to display help for "reboot serial"
         .subcommand(
             clap::Command::new("reboot serial").about("reboot the target and enter serial mode"),
         )
@@ -73,7 +81,10 @@ fn vdmtool() -> Result<()> {
     }
 
     let code = device.to_uppercase();
-    let mut device = cd321x::Device::new(matches.get_one::<String>("bus").unwrap(), addr, code)?;
+
+    let bus = matches.get_one::<String>("bus").unwrap();
+    let mut transport = I2cTransport::new(bus.as_str(), addr)?;
+    let mut device = cd321x::Device::new(&mut transport, &code)?;
 
     match matches.subcommand() {
         Some(("dfu", _)) => {
@@ -100,6 +111,7 @@ fn vdmtool() -> Result<()> {
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn main() -> ExitCode {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
