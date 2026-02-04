@@ -271,6 +271,15 @@ impl Device {
         info!("Putting target into DebugUSB mode...");
         self.vdms(VdmSopType::SopStar, &vdos)
     }
+
+    pub(crate) fn disconnect(&mut self) -> Result<()> {
+        let data: [u8; 1] = [3];
+        self.exec_cmd(b"DISC", &data)?;
+        if self.get_mode()? != TpsMode::Dbma {
+            return Err(Error::TypecController);
+        }
+        Ok(())
+    }
 }
 
 impl Drop for Device {
