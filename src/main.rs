@@ -52,6 +52,7 @@ fn vdmtool() -> Result<()> {
         .subcommand(clap::Command::new("serial").about("enter serial mode on both ends"))
         .subcommand(clap::Command::new("debugusb").about("enter Debug USB mode on target"))
         .subcommand(clap::Command::new("dfu").about("put the target into DFU mode"))
+        .subcommand(clap::Command::new("disconnect").about("Simulate USB unplug/plug"))
         .subcommand(clap::Command::new("nop").about("Do nothing"))
         .arg_required_else_help(true)
         .get_matches();
@@ -94,6 +95,9 @@ fn vdmtool() -> Result<()> {
         }
         Some(("debugusb", _)) => {
             device.debugusb()?;
+        }
+        Some(("disconnect", _)) => {
+            device.disconnect()?;
         }
         _ => {}
     }
