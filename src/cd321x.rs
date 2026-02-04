@@ -65,10 +65,10 @@ pub(crate) struct Device {
     key: Vec<u8>,
 }
 
-/// Try to open the given I2C bus and slave address.
+/// Try to open the given I2C bus and target address.
 /// Returns a configured LinuxI2CDevice on success.
-fn verify_i2c_device(bus: &str, slave_address: u16) -> Result<LinuxI2CDevice> {
-    match LinuxI2CDevice::new(bus, slave_address) {
+fn verify_i2c_device(bus: &str, target_address: u16) -> Result<LinuxI2CDevice> {
+    match LinuxI2CDevice::new(bus, target_address) {
         Ok(dev) => {
             return Ok(dev);
         }
@@ -76,7 +76,7 @@ fn verify_i2c_device(bus: &str, slave_address: u16) -> Result<LinuxI2CDevice> {
     }
 
     info!("Safely opening failed ==> Forcefully opening device...");
-    let forced = unsafe { LinuxI2CDevice::force_new(bus, slave_address) };
+    let forced = unsafe { LinuxI2CDevice::force_new(bus, target_address) };
     match forced {
         Ok(dev) => Ok(dev),
         Err(_) => Err(Error::I2C),

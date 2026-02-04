@@ -33,7 +33,7 @@ USAGE:
     linuxvdmtool [OPTIONS] [SUBCOMMAND]
 
 OPTIONS:
-    -a, --address [<ADDRESS>...]    i2c slave address of the USB-C controller device. [default:
+    -a, --address [<ADDRESS>...]    i2c target address of the USB-C controller device. [default:
                                     0x38]
     -b, --bus [<BUS>...]            i2c bus of the USB-C controller device. [default: /dev/i2c-0]
     -h, --help                    Print help information

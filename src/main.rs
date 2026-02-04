@@ -35,7 +35,7 @@ fn vdmtool() -> Result<()> {
                 .default_value("/dev/i2c-0"),
         )
         .arg(
-            clap::arg!(-a --address [ADDRESS] "i2c slave address of the USB-C controller device.")
+            clap::arg!(-a --address [ADDRESS] "i2c target address of the USB-C controller device.")
                 .default_value("0x38"),
         )
         .subcommand(
