@@ -233,7 +233,7 @@ impl Device {
         self.vdms(VdmSopType::SopStar, &vdos)
     }
 
-    pub(crate) fn reboot_serial(&mut self) -> Result<()> {
+    pub(crate) fn reboot_wait(&mut self) -> Result<()> {
         self.reboot()?;
         info!("Waiting for connection...");
 
@@ -252,7 +252,7 @@ impl Device {
         }
         info!(" Connected");
         thread::sleep(RECONNECT_WAIT);
-        self.serial()
+        Ok(())
     }
 
     pub(crate) fn serial(&mut self) -> Result<()> {

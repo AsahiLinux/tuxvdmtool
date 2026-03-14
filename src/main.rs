@@ -43,11 +43,19 @@ fn vdmtool() -> Result<()> {
                 .about("reboot the target")
                 .subcommand(
                     clap::Command::new("serial").about("reboot the target and enter serial mode"),
+                )
+                .subcommand(
+                    clap::Command::new("debugusb")
+                        .about("reboot the target and enter Debug USB mode"),
                 ),
         )
-        // dummy command to display help for "reboot serial"
+        // dummy commands to display help for "reboot serial/debugusb"
         .subcommand(
             clap::Command::new("reboot serial").about("reboot the target and enter serial mode"),
+        )
+        .subcommand(
+            clap::Command::new("reboot debugusb")
+                .about("reboot the target and enter Debug USB mode"),
         )
         .subcommand(clap::Command::new("serial").about("enter serial mode on both ends"))
         .subcommand(clap::Command::new("debugusb").about("enter Debug USB mode on target"))
@@ -81,7 +89,12 @@ fn vdmtool() -> Result<()> {
         }
         Some(("reboot", args)) => match args.subcommand() {
             Some(("serial", _)) => {
-                device.reboot_serial()?;
+                device.reboot_wait()?;
+                device.serial()?;
+            }
+            Some(("debugusb", _)) => {
+                device.reboot_wait()?;
+                device.debugusb()?;
             }
             None => {
                 device.reboot()?;
