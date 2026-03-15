@@ -26,6 +26,9 @@ You need to use a *USB 3.0 compatible* (SuperSpeed) Type C cable. USB 2.0-only c
 
 Note that the numbering of the i2c busses is not stable and the default bus `/dev/i2c-0` will be wrong randomly. To find the correct buse use `grep cd321x /sys/class/i2c-dev/i2c-?/device/?-0038/name`.
 
+Alternatively the `--connector` parameter will find a controller by matching its argument against the USB-C connector labels.
+Use `grep -a 'USB-C ' /sys/class/i2c-dev/i2c-?/device/*/of_node/connector/label` to list all USB-C connectors.
+
 Run it as root (`sudo ./tuxvdmtool`).
 
 ```
@@ -36,6 +39,7 @@ OPTIONS:
     -a, --address [<ADDRESS>...]    i2c target address of the USB-C controller device. [default:
                                     0x38]
     -b, --bus [<BUS>...]            i2c bus of the USB-C controller device. [default: /dev/i2c-0]
+    -c, --connector [<CONNECTOR>...]    (Partial) connector label of the USB-C controller device.
     -h, --help                    Print help information
     -V, --version                 Print version information
 

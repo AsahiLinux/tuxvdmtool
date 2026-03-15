@@ -5,15 +5,20 @@
  */
 
 pub mod cd321x;
+#[cfg(target_os = "linux")]
+pub mod sysfs;
 
+#[cfg(target_os = "linux")]
+use crate::sysfs::get_i2c_dev_from_connector;
 use env_logger::Env;
-use log::error;
+use log::{error, info};
 use std::{fs, process::ExitCode};
 
 #[derive(Debug)]
 #[allow(dead_code)]
 enum Error {
     Device,
+    DeviceNotFound,
     Compatible,
     FeatureMissing,
     TypecController,
@@ -28,6 +33,11 @@ enum Error {
 
 type Result<T> = std::result::Result<T, Error>;
 
+#[cfg(not(target_os = "linux"))]
+fn get_i2c_dev_fromconnector(&connector: str) -> Result<(String, u16)> {
+    Err(Error::DeviceNotFound)
+}
+
 fn vdmtool() -> Result<()> {
     let matches = clap::command!()
         .arg(
@@ -38,6 +48,7 @@ fn vdmtool() -> Result<()> {
             clap::arg!(-a --address [ADDRESS] "i2c target address of the USB-C controller device.")
                 .default_value("0x38"),
         )
+        .arg(clap::arg!(-c --connector [CONNECTOR] "(Partial) connector label of the USB-C controller device."))
         .subcommand(
             clap::Command::new("reboot")
                 .about("reboot the target")
@@ -73,16 +84,28 @@ fn vdmtool() -> Result<()> {
         return Err(Error::Compatible);
     }
 
-    let addr_str = matches.get_one::<String>("address").unwrap();
     let addr: u16;
-    if let Some(stripped) = addr_str.strip_prefix("0x") {
-        addr = u16::from_str_radix(stripped, 16).map_err(Error::Parse)?;
-    } else {
-        addr = addr_str.parse::<u16>().map_err(Error::Parse)?;
+    let bus: String;
+
+    match matches.get_one::<String>("connector") {
+        Some(connector) => {
+            let connector = connector.to_ascii_lowercase();
+            (bus, addr) = get_i2c_dev_from_connector(&connector)?
+        }
+        None => {
+            let addr_str = matches.get_one::<String>("address").unwrap();
+            if let Some(stripped) = addr_str.strip_prefix("0x") {
+                addr = u16::from_str_radix(stripped, 16).map_err(Error::Parse)?;
+            } else {
+                addr = addr_str.parse::<u16>().map_err(Error::Parse)?;
+            }
+            bus = matches.get_one::<String>("bus").unwrap().to_string();
+        }
     }
+    info!("Using I2C bus:{bus} address:{addr:#x}");
 
     let code = device.to_uppercase();
-    let mut device = cd321x::Device::new(matches.get_one::<String>("bus").unwrap(), addr, code)?;
+    let mut device = cd321x::Device::new(&bus, addr, code)?;
 
     match matches.subcommand() {
         Some(("dfu", _)) => {
