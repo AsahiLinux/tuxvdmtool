@@ -5,11 +5,12 @@
  */
 
 pub mod cd321x;
+pub mod i2c;
 #[cfg(target_os = "linux")]
 pub mod sysfs;
 
 #[cfg(target_os = "linux")]
-use crate::sysfs::get_i2c_dev_from_connector;
+use crate::sysfs::{get_i2c_dev_from_typec_port, get_typec_port_from_connector};
 use env_logger::Env;
 use log::{error, info};
 use std::{fs, process::ExitCode};
@@ -34,7 +35,7 @@ enum Error {
 type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(not(target_os = "linux"))]
-fn get_i2c_dev_fromconnector(&connector: str) -> Result<(String, u16)> {
+fn get_typec_dev_fromconnector(&connector: str) -> Result<(String, u16)> {
     Err(Error::DeviceNotFound)
 }
 
@@ -90,7 +91,8 @@ fn vdmtool() -> Result<()> {
     match matches.get_one::<String>("connector") {
         Some(connector) => {
             let connector = connector.to_ascii_lowercase();
-            (bus, addr) = get_i2c_dev_from_connector(&connector)?
+            let port = get_typec_port_from_connector(&connector)?;
+            (bus, addr) = get_i2c_dev_from_typec_port(&port).ok_or(Error::DeviceNotFound)?
         }
         None => {
             let addr_str = matches.get_one::<String>("address").unwrap();
@@ -105,7 +107,8 @@ fn vdmtool() -> Result<()> {
     info!("Using I2C bus:{bus} address:{addr:#x}");
 
     let code = device.to_uppercase();
-    let mut device = cd321x::Device::new(&bus, addr, code)?;
+    let bus_dev = Box::new(i2c::I2CBusDevice::open(&bus, addr)?);
+    let mut device = cd321x::Device::new(bus_dev, code)?;
 
     match matches.subcommand() {
         Some(("dfu", _)) => {

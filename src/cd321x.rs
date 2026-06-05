@@ -5,13 +5,17 @@
  */
 
 use crate::{Error, Result};
-use i2cdev::{core::I2CDevice, linux::LinuxI2CDevice};
 use log::{error, info};
 use std::{
     str::FromStr,
     thread,
     time::{Duration, Instant},
 };
+
+pub(crate) trait BusDevice {
+    fn write_block(&mut self, reg: u8, data: &[u8]) -> Result<()>;
+    fn read_block(&mut self, reg: u8, buf: &mut [u8]) -> Result<()>;
+}
 
 const RECONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const POLL_WAIT: Duration = Duration::from_millis(100);
@@ -61,32 +65,14 @@ fn is_invalid_cmd(val: u32) -> bool {
 }
 
 pub(crate) struct Device {
-    i2c: LinuxI2CDevice,
+    bus_dev: Box<dyn BusDevice>,
     key: Vec<u8>,
 }
 
-/// Try to open the given I2C bus and target address.
-/// Returns a configured LinuxI2CDevice on success.
-fn verify_i2c_device(bus: &str, target_address: u16) -> Result<LinuxI2CDevice> {
-    match LinuxI2CDevice::new(bus, target_address) {
-        Ok(dev) => {
-            return Ok(dev);
-        }
-        Err(_) => {} // Fall through to attempt forced open
-    }
-
-    info!("Safely opening failed ==> Forcefully opening device...");
-    let forced = unsafe { LinuxI2CDevice::force_new(bus, target_address) };
-    match forced {
-        Ok(dev) => Ok(dev),
-        Err(_) => Err(Error::I2C),
-    }
-}
-
 impl Device {
-    pub(crate) fn new(bus: &str, address: u16, code: String) -> Result<Self> {
+    pub(crate) fn new(bus_dev: Box<dyn BusDevice>, code: String) -> Result<Self> {
         let mut device = Self {
-            i2c: verify_i2c_device(bus, address)?,
+            bus_dev,
             key: code.into_bytes().into_iter().rev().collect::<Vec<u8>>(),
         };
         if device.get_mode()? != TpsMode::App {
@@ -112,7 +98,7 @@ impl Device {
         // First: Check CMD1 Register busy
         {
             let mut status_buf = [0u8; 4];
-            self.read_block(TPS_REG_CMD1, &mut status_buf)?;
+            self.bus_dev.read_block(TPS_REG_CMD1, &mut status_buf)?;
             let val = u32::from_le_bytes(status_buf);
             if val != 0 && !is_invalid_cmd(val) {
                 info!("Busy Check Failed with VAL = {:?}", val);
@@ -122,17 +108,17 @@ impl Device {
 
         // Write input Data to DATA1
         if !in_data.is_empty() {
-            self.write_block(TPS_REG_DATA1, in_data)?;
+            self.bus_dev.write_block(TPS_REG_DATA1, in_data)?;
         }
 
         // Write 4-byte command tag
-        self.write_block(TPS_REG_CMD1, cmd_tag)?;
+        self.bus_dev.write_block(TPS_REG_CMD1, cmd_tag)?;
 
         // Poll until CMD1 becomes zero or timeout
         let start = Instant::now();
         loop {
             let mut status_buf = [0u8; 4];
-            self.read_block(TPS_REG_CMD1, &mut status_buf)?;
+            self.bus_dev.read_block(TPS_REG_CMD1, &mut status_buf)?;
             let val = u32::from_le_bytes(status_buf);
             if is_invalid_cmd(val) {
                 info!("Invalid Command");
@@ -149,28 +135,9 @@ impl Device {
         Ok(())
     }
 
-    fn write_block(&mut self, reg: u8, data: &[u8]) -> Result<()> {
-        let mut buf = Vec::with_capacity(1 + 1 + data.len());
-        let size: u8 = data.len().try_into().unwrap();
-        buf.push(reg);
-        buf.push(size);
-        buf.extend_from_slice(data);
-        self.i2c.write(&buf).map_err(|_| Error::I2C)?;
-        Ok(())
-    }
-
-    fn read_block(&mut self, reg: u8, buf: &mut [u8]) -> Result<()> {
-        self.i2c.write(&[reg]).map_err(|_| Error::I2C)?;
-        let mut internal_buf = vec![0u8; buf.len() + 1];
-        self.i2c.read(&mut internal_buf).map_err(|_| Error::I2C)?;
-        buf.copy_from_slice(&internal_buf[1..=buf.len()]);
-
-        Ok(())
-    }
-
     fn get_mode(&mut self) -> Result<TpsMode> {
         let mut buf = [0u8; 4];
-        self.read_block(TPS_REG_MODE, &mut buf)?;
+        self.bus_dev.read_block(TPS_REG_MODE, &mut buf)?;
         let s = std::str::from_utf8(&buf).unwrap();
         let m = TpsMode::from_str(s).map_err(|_| Error::TypecController)?;
         Ok(m)
@@ -216,7 +183,7 @@ impl Device {
 
     fn check_connected(&mut self) -> Result<bool> {
         let mut buf = [0u8; 2];
-        self.read_block(TPS_REG_POWER_STATUS, &mut buf)?;
+        self.bus_dev.read_block(TPS_REG_POWER_STATUS, &mut buf)?;
         let power_status = u16::from_le_bytes(buf);
         Ok((power_status & 1) != 0)
     }
