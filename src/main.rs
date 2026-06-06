@@ -6,11 +6,14 @@
 
 pub mod cd321x;
 pub mod i2c;
+pub mod spmi;
 #[cfg(target_os = "linux")]
 pub mod sysfs;
 
 #[cfg(target_os = "linux")]
-use crate::sysfs::{get_i2c_dev_from_typec_port, get_typec_port_from_connector};
+use crate::sysfs::{
+    get_i2c_dev_from_typec_port, get_spmi_dbgfs_from_typec_port, get_typec_port_from_connector,
+};
 use env_logger::Env;
 use log::{error, info};
 use std::{fs, process::ExitCode};
@@ -27,6 +30,7 @@ enum Error {
     ReconnectTimeout,
     ControllerTimeout,
     I2C,
+    Spmi,
     Io(std::io::Error),
     Utf8(std::str::Utf8Error),
     Parse(std::num::ParseIntError),
@@ -42,11 +46,11 @@ fn get_typec_dev_fromconnector(&connector: str) -> Result<(String, u16)> {
 fn vdmtool() -> Result<()> {
     let matches = clap::command!()
         .arg(
-            clap::arg!(-b --bus [BUS] "i2c bus of the USB-C controller device.")
+            clap::arg!(-b --bus [BUS] "i2c or spmi bus of the USB-C controller device.")
                 .default_value("/dev/i2c-0"),
         )
         .arg(
-            clap::arg!(-a --address [ADDRESS] "i2c target address of the USB-C controller device.")
+            clap::arg!(-a --address [ADDRESS] "i2c or spmi target address of the USB-C controller device.")
                 .default_value("0x38"),
         )
         .arg(clap::arg!(-c --connector [CONNECTOR] "(Partial) connector label of the USB-C controller device."))
@@ -92,7 +96,9 @@ fn vdmtool() -> Result<()> {
         Some(connector) => {
             let connector = connector.to_ascii_lowercase();
             let port = get_typec_port_from_connector(&connector)?;
-            (bus, addr) = get_i2c_dev_from_typec_port(&port).ok_or(Error::DeviceNotFound)?
+            (bus, addr) = get_i2c_dev_from_typec_port(&port)
+                .or(get_spmi_dbgfs_from_typec_port(&port))
+                .ok_or(Error::DeviceNotFound)?
         }
         None => {
             let addr_str = matches.get_one::<String>("address").unwrap();
@@ -104,10 +110,16 @@ fn vdmtool() -> Result<()> {
             bus = matches.get_one::<String>("bus").unwrap().to_string();
         }
     }
-    info!("Using I2C bus:{bus} address:{addr:#x}");
+    info!("Using bus:{bus} address:{addr:#x}");
 
     let code = device.to_uppercase();
-    let bus_dev = Box::new(i2c::I2CBusDevice::open(&bus, addr)?);
+    let bus_dev: Box<dyn cd321x::BusDevice> = if bus.starts_with("/dev/i2c-") {
+        Box::new(i2c::I2CBusDevice::open(&bus, addr)?)
+    } else if bus.starts_with("/sys/kernel/debug/spmi-") {
+        Box::new(spmi::SpmiBusDevice::open(&bus, addr)?)
+    } else {
+        return Err(Error::DeviceNotFound);
+    };
     let mut device = cd321x::Device::new(bus_dev, code)?;
 
     match matches.subcommand() {

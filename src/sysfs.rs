@@ -32,6 +32,28 @@ pub(crate) fn get_i2c_dev_from_typec_port(typec_path: &Path) -> Option<(String, 
     Some((format!("/dev/i2c-{}", bus), addr))
 }
 
+pub(crate) fn get_spmi_dbgfs_from_typec_port(typec_path: &Path) -> Option<(String, u16)> {
+    let path = std::fs::canonicalize(typec_path.join("device")).ok()?;
+
+    // First, check that this device is located on an spmi bus
+    let bus_id = path
+        .parent()?
+        .file_name()?
+        .to_str()
+        .unwrap()
+        .strip_prefix("spmi-")?;
+
+    // Only consider SPMI devices with the pattern  ("%d-%02x", bus, addr)
+    let (bus, addr) = path.file_name()?.to_str()?.split_once("-")?;
+
+    if bus != bus_id {
+        return None;
+    };
+
+    let addr = u16::from_str_radix(addr, 16).unwrap();
+    Some((format!("/sys/kernel/debug/spmi-{}", bus), addr))
+}
+
 pub(crate) fn get_typec_port_from_connector(connector: &str) -> Result<PathBuf> {
     let mut match_len = usize::MAX;
     let mut candidate: Option<PathBuf> = None;
